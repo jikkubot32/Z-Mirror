@@ -1,26 +1,26 @@
-from pyrogram.filters import command
-from pyrogram.handlers import MessageHandler
+from nekozee.filters import command
+from nekozee.handlers import MessageHandler
 
 from bot import bot
-from bot.helper.ext_utils.bot_utils import (
-    sync_to_async,
-    new_task
+from ..helper.ext_utils.bot_utils import (
+    new_task,
+    sync_to_async
 )
-from bot.helper.ext_utils.links_utils import is_gdrive_link
-from bot.helper.ext_utils.status_utils import get_readable_file_size
-from bot.helper.task_utils.gdrive_utils.count import gdCount
-from bot.helper.telegram_helper.bot_commands import BotCommands
-from bot.helper.telegram_helper.filters import CustomFilters
-from bot.helper.telegram_helper.message_utils import (
+from ..helper.ext_utils.links_utils import is_gdrive_link
+from ..helper.ext_utils.status_utils import get_readable_file_size
+from ..helper.task_utils.gdrive_utils.count import GoogleDriveCount
+from ..helper.telegram_helper.bot_commands import BotCommands
+from ..helper.telegram_helper.filters import CustomFilters
+from ..helper.telegram_helper.message_utils import (
     anno_checker,
     auto_delete_message,
-    deleteMessage,
-    sendMessage
+    delete_message,
+    send_message
 )
 
 
 @new_task
-async def countNode(_, message):
+async def count_node(_, message):
     args = message.text.split()
     from_user = message.from_user
     if not from_user:
@@ -41,7 +41,7 @@ async def countNode(_, message):
         link = reply_to.text.split(maxsplit=1)[0].strip()
 
     if is_gdrive_link(link):
-        msg = await sendMessage(
+        msg = await send_message(
             message,
             f"Counting: <code>{link}</code>"
         )
@@ -51,12 +51,12 @@ async def countNode(_, message):
             size, files,
             folders
         ) = await sync_to_async(
-            gdCount().count,
+            GoogleDriveCount().count,
             link,
             from_user.id
         )
         if mime_type is None:
-            smsg = await sendMessage(
+            smsg = await send_message(
                 message,
                 name
             )
@@ -65,7 +65,7 @@ async def countNode(_, message):
                 smsg
             )
             return
-        await deleteMessage(msg)
+        await delete_message(msg)
         msg = f"<b>Name: </b><code>{name}</code>"
         msg += f"\n\n<b>Size: </b>{get_readable_file_size(size)}"
         msg += f"\n\n<b>Type: </b>{mime_type}"
@@ -78,7 +78,7 @@ async def countNode(_, message):
             "Send Gdrive link along with command or by replying to the link by command"
         )
 
-    smsg = await sendMessage(
+    smsg = await send_message(
         message,
         msg
     )
@@ -90,7 +90,7 @@ async def countNode(_, message):
 
 bot.add_handler( # type: ignore
     MessageHandler(
-        countNode,
+        count_node,
         filters=command(
             BotCommands.CountCommand,
             case_sensitive=True

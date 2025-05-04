@@ -46,10 +46,27 @@ multi_link = """
 """
 
 same_dir = """
-<b>Multi links within the same upload directory only by replying to the first link/file</b>: -sd
+<b>Move file(s)/folder(s) to new folder</b>: -sd
 
-/cmd -m 10(number of links/files) -sd folder name (multi message)
-/cmd -b -sd folder name (bulk-message/file)
+You can use this arg also to move multiple links/torrents contents to the same directory, so all links will be uploaded together as one task
+
+/cmd link -sd new folder (only one link inside new folder)
+/cmd -m 10(number of links/files) -sd folder name (all links contents in one folder)
+/cmd -b -sd folder name (reply to batch of message/file(each link on new line))
+
+While using bulk you can also use this arg with different folder name along with the links in message or file batch
+Example:
+link1 -sd folder1
+link2 -sd folder1
+link3 -sd folder2
+link4 -sd folder2
+link5 -sd folder3
+link6
+
+so link1 and link2 content will be uploaded from same folder which is folder1
+link3 and link4 content will be uploaded from same folder also which is folder2
+link5 will uploaded alone inside new folder named folder3
+link6 will get uploaded normally alone
 """
 
 thumb = """
@@ -102,16 +119,20 @@ Check here all <a href='https://rclone.org/flags/'>RcloneFlags</a>.
 bulk = """
 <b>Bulk Download</b>: -b
 
-Bulk can be used by text message and by replying to a text file containing links separated by a new line.
-You can use it only by replying to a message(text/file).
+Bulk can be used only by replying to text message or text file contains links separated by new line.
+
 Example:
 link1 -n new name -up remote1:path1 -rcf |key:value|key:value
 link2 -z -n new name -up remote2:path2
 link3 -e -n new name -up remote2:path2
-Reply to this example by this cmd -> /cmd -b(bulk) or /cmd -b -sd folder name
-You can set the start and end of the links from the bulk like seed, with -b start:end or only end by -b :end or only start by -b start.
-The default start is from zero(first link) to infinity.
-"""
+
+Reply to this example by this cmd -> /cmd -b(bulk)
+
+Note: Any arg along with the cmd will be setted to all links
+/cmd -b -up remote: -z -sd folder name (all links contents in one zipped folder uploaded to one destination)
+so you can't set different upload destinations along with link incase you have added -sd along with cmd
+You can set start and end of the links from the bulk like seed, with -b start:end or only end by -b :end or only start by -b start.
+The default start is from zero(first link) to inf."""
 
 rlone_dl = """
 <b>Rclone Download</b>:
@@ -169,8 +190,8 @@ You can control those values. Example: /cmd -sv 70:5(sample-duration:part-durati
 screenshot = """
 <b>Screenshots</b>: -ss
 
-Create up to 10 screenshots for one video or a folder of videos.
-/cmd -ss (it will take the default values which are 10 photos).
+Create screenshots for one video or folder of videos.
+/cmd -ss (it will take the default values which is 10 photos).
 You can control this value. Example: /cmd -ss 6.
 """
 
@@ -202,7 +223,8 @@ In case default quality is added from yt-dlp options using format option and you
 yt_opt = """
 <b>Options</b>: -opt
 
-/cmd link -opt playliststart:^10|fragment_retries:^inf|matchtitle:S13|writesubtitles:true|live_from_start:true|postprocessor_args:{"ffmpeg": ["-threads", "4"]}|wait_for_video:(5, 100)
+/cmd link -opt playliststart:^10|fragment_retries:^inf|matchtitle:S13|writesubtitles:true|live_from_start:true|postprocessor_args:{"ffmpeg": ["-threads", "4"]}|wait_for_video:(5, 100)|download_ranges:[{"start_time": 0, "end_time": 10}]
+
 Note: Add `^` before integer or float, some values must be numeric and some string.
 Like playlist_items:10 works with string, so no need to add `^` before the number but playlistend works only with integer so you must add `^` before the number like example above.
 You can add tuple and dict also. Use double quotes inside dict.
@@ -245,20 +267,51 @@ If DEFAULT_UPLOAD is `gd` then you can pass up: `rc` to upload to RCLONE_PATH.
 /cmd mrcc:rclonePath -up rcl or rc(if you have added rclone path from usetting) (to use user config)
 """
 
-name_sub = """
+name_sub = r"""
 <b>Name Substitution</b>: -ns
 
-/cmd link -ns tea : coffee : s|ACC :  : s|mP4
-This will affect all files. Format: wordToReplace : wordToReplaceWith : sensitiveCase
-1. tea will get replaced by coffee with sensitive case because I have added `s` last of the option.
-2. ACC will get removed because I have added nothing between to replace with sensitive case because I have added `s` last of the option.
-3. mP4 will get removed because I have added nothing to replace with
+<b>Name Substitution</b>: -ns
+/cmd link -ns script/code/s | mirror/leech | tea/ /s | clone | cpu/ | \[ZEE\]/ZEE | \\text\\/text/s
+This will affect on all files. Format: wordToReplace/wordToReplaceWith/sensitiveCase
+Word Subtitions. You can add pattern instead of normal text. Timeout: 60 sec
+NOTE: You must add \ before any character, those are the characters: \^$.|?*+()[]{}-
+1. script will get replaced by code with sensitive case
+2. mirror will get replaced by leech
+4. tea will get replaced by space with sensitive case
+5. clone will get removed
+6. cpu will get replaced by space
+7. [ZEE] will get replaced by ZEE
+8. \text\ will get replaced by text with sensitive case
 """
 
 mixed_leech = """
 <b>Mixed Leech</b>: -ml
 
 /cmd link -ml (leech by user and bot session with respect to size)
+"""
+
+thumbnail_layout = """
+<b>Thumbnail Layout</b>: -tl
+
+/cmd link -tl 3x3 (widthxheight) 3 photos in row and 3 photos in column
+"""
+
+leech_as = """
+<b>Leech as</b>: -doc -med
+
+/cmd link -doc (Leech as document)
+/cmd link -med (Leech as media)
+"""
+
+metadata = """
+<b>Metadata</b>: -md
+/cmd link -md text
+It will add text in your video metadata. (MKV & MP4 supports only)
+
+
+<b>Metadata Attachment</b>: -mda
+/cmd link -mda tg-message-link(doc or photo) or any direct link
+It will embed thumb in your video. (MKV & MP4 supports only)
 """
 
 YT_HELP_DICT = {
@@ -280,6 +333,9 @@ YT_HELP_DICT = {
     "ꜰᴏʀᴄᴇ\nꜱᴛᴀʀᴛ": force_start,
     "ɴᴀᴍᴇ\nꜱᴜʙꜱᴛɪᴛᴜᴛᴇ": name_sub,
     "ʜʏʙʀɪᴅ\nʟᴇᴇᴄʜ": mixed_leech,
+    "ᴛʜᴜᴍʙ\nʟᴀʏᴏᴜᴛ": thumbnail_layout,
+    "ʟᴇᴇᴄʜ\nᴛʏᴘᴇ": leech_as,
+    "ᴍᴇᴛᴀᴅᴀᴛᴀ\nᴀᴛᴛᴀᴄʜ": metadata,
 }
 
 MIRROR_HELP_DICT = {
@@ -307,6 +363,9 @@ MIRROR_HELP_DICT = {
     "ᴜꜱᴇʀ\nᴅᴏᴡɴʟᴏᴀᴅ": user_download,
     "ɴᴀᴍᴇ\nꜱᴜʙꜱᴛɪᴛᴜᴛᴇ": name_sub,
     "ʜʏʙʀɪᴅ\nʟᴇᴇᴄʜ": mixed_leech,
+    "ᴛʜᴜᴍʙ\nʟᴀʏᴏᴜᴛ": thumbnail_layout,
+    "ʟᴇᴇᴄʜ\nᴛʏᴘᴇ": leech_as,
+    "ᴍᴇᴛᴀᴅᴀᴛᴀ\nᴀᴛᴛᴀᴄʜ": metadata,
 }
 
 CLONE_HELP_DICT = {

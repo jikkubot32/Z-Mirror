@@ -1,41 +1,40 @@
-from collections import OrderedDict
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from asyncio import (
+    Lock,
+    new_event_loop,
+    set_event_loop
+)
 from aria2p import (
     API as ariaAPI,
     Client as ariaClient
 )
-from asyncio import (
-    Lock,
-    get_event_loop
-)
-from concurrent.futures import ThreadPoolExecutor
+from collections import OrderedDict
 from dotenv import (
     load_dotenv,
     dotenv_values
 )
 from logging import (
-    getLogger,
-    FileHandler,
-    StreamHandler,
+    ERROR,
     INFO,
     basicConfig,
     error as log_error,
+    FileHandler,
+    getLogger,
     info as log_info,
+    StreamHandler,
     warning as log_warning,
-    ERROR,
 )
+from nekozee import Client as TgClient
 from os import (
-    remove,
+    environ,
     path as ospath,
-    environ
+    remove
 )
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
-from pyrogram import (
-    Client as tgClient
-)
-from qbittorrentapi import Client as qbClient
-from sabnzbdapi import sabnzbdClient
+from qbittorrentapi import Client as QbClient
+from sabnzbdapi import SabnzbdClient
+from shutil import rmtree
 from socket import setdefaulttimeout
 from subprocess import (
     Popen,
@@ -58,12 +57,13 @@ getLogger("urllib3").setLevel(INFO)
 getLogger("apscheduler").setLevel(ERROR)
 getLogger("httpx").setLevel(ERROR)
 getLogger("pymongo").setLevel(ERROR)
-getLogger("pyrogram").setLevel(ERROR)
+getLogger("nekozee").setLevel(ERROR)
 
-botStartTime = time()
-bot_loop = get_event_loop()
-THREADPOOL = ThreadPoolExecutor(max_workers=99999)
-bot_loop.set_default_executor(THREADPOOL)
+bot_start_time = time()
+
+bot_loop = new_event_loop()
+set_event_loop(bot_loop)
+
 
 basicConfig(
     format="%(levelname)s | From %(name)s -> %(module)s line no: %(lineno)d | %(message)s",
@@ -81,24 +81,26 @@ load_dotenv(
     override=True
 )
 
-Intervals = {
+intervals = {
     "status": {},
     "qb": "",
     "jd": "",
     "nzb": "",
     "stopAll": False
 }
-QbTorrents = {}
+qb_torrents = {}
 jd_downloads = {}
 nzb_jobs = {}
-DRIVES_NAMES = []
-DRIVES_IDS = []
-INDEX_URLS = []
-GLOBAL_EXTENSION_FILTER = [
+
+drives_names = []
+drives_ids = []
+index_urls = []
+global_extension_filter = [
     "aria2",
     "!qB"
 ]
 shorteneres_list = []
+
 extra_buttons = {}
 user_data = {}
 aria2_options = {}
@@ -106,6 +108,7 @@ qbit_options = {}
 nzb_options = {}
 queued_dl = {}
 queued_up = {}
+
 non_queued_dl = set()
 non_queued_up = set()
 multi_tags = set()
@@ -124,6 +127,8 @@ nzb_listener_lock = Lock()
 jd_lock = Lock()
 cpu_eater_lock = Lock()
 subprocess_lock = Lock()
+same_directory_lock = Lock()
+
 status_dict = {}
 task_dict = {}
 rss_dict = {}
@@ -140,7 +145,7 @@ if len(BOT_TOKEN) == 0:
     log_error("BOT_TOKEN variable is missing! Exiting now")
     exit(1)
 
-bot_id = BOT_TOKEN.split(
+BOT_ID = BOT_TOKEN.split(
     ":",
     1
 )[0]
@@ -160,10 +165,10 @@ if DATABASE_URL:
         )
         db = conn.zee
         current_config = dict(dotenv_values("config.env"))
-        old_config = db.settings.deployConfig.find_one({"_id": bot_id})
+        old_config = db.settings.deployConfig.find_one({"_id": BOT_ID})
         if old_config is None:
             db.settings.deployConfig.replace_one(
-                {"_id": bot_id},
+                {"_id": BOT_ID},
                 current_config,
                 upsert=True
             )
@@ -174,15 +179,15 @@ if DATABASE_URL:
             and old_config != current_config
         ):
             db.settings.deployConfig.replace_one(
-                {"_id": bot_id},
+                {"_id": BOT_ID},
                 current_config,
                 upsert=True
             )
-        elif config_dict := db.settings.config.find_one({"_id": bot_id}):
+        elif config_dict := db.settings.config.find_one({"_id": BOT_ID}):
             del config_dict["_id"]
             for key, value in config_dict.items():
                 environ[key] = str(value)
-        if pf_dict := db.settings.files.find_one({"_id": bot_id}):
+        if pf_dict := db.settings.files.find_one({"_id": BOT_ID}):
             del pf_dict["_id"]
             for key, value in pf_dict.items():
                 if value:
@@ -195,27 +200,13 @@ if DATABASE_URL:
                         "wb+"
                     ) as f:
                         f.write(value)
-                    if file_ == "cfg.zip":
-                        run([
-                            "rm",
-                            "-rf",
-                            "/JDownloader/cfg"
-                        ])
-                        run([
-                            "7z",
-                            "x",
-                            "-bso0",
-                            "cfg.zip",
-                            "-o/JDownloader"
-                        ])
-                        remove("cfg.zip")
-        if a2c_options := db.settings.aria2c.find_one({"_id": bot_id}):
+        if a2c_options := db.settings.aria2c.find_one({"_id": BOT_ID}):
             del a2c_options["_id"]
             aria2_options = a2c_options
-        if qbit_opt := db.settings.qbittorrent.find_one({"_id": bot_id}):
+        if qbit_opt := db.settings.qbittorrent.find_one({"_id": BOT_ID}):
             del qbit_opt["_id"]
             qbit_options = qbit_opt
-        if nzb_opt := db.settings.nzb.find_one({"_id": bot_id}):
+        if nzb_opt := db.settings.nzb.find_one({"_id": BOT_ID}):
             if ospath.exists("sabnzbd/SABnzbd.ini.bak"):
                 remove("sabnzbd/SABnzbd.ini.bak")
             del nzb_opt["_id"]
@@ -228,7 +219,7 @@ if DATABASE_URL:
             "BOT_TOKEN",
             ""
         )
-        bot_id = BOT_TOKEN.split(
+        BOT_ID = BOT_TOKEN.split(
             ":",
             1
         )[0]
@@ -240,6 +231,20 @@ if DATABASE_URL:
         LOGGER.error(f"Database ERROR: {e}")
 else:
     config_dict = {}
+
+if ospath.exists("cfg.zip"):
+    if ospath.exists("/JDownloader/cfg"):
+        rmtree(
+            "/JDownloader/cfg",
+            ignore_errors=True
+        )
+    run([
+        "7z",
+        "x",
+        "cfg.zip",
+        "-o/JDownloader"
+    ])
+    remove("cfg.zip")
 
 if not ospath.exists(".netrc"):
     with open(
@@ -286,7 +291,7 @@ USER_SESSION_STRING = environ.get(
 )
 if len(USER_SESSION_STRING) != 0:
     try:
-        user = tgClient(
+        user = TgClient(
             "zeeu",
             TELEGRAM_API,
             TELEGRAM_HASH,
@@ -376,7 +381,7 @@ if len(EXTENSION_FILTER) > 0:
     fx = EXTENSION_FILTER.split()
     for x in fx:
         x = x.lstrip(".")
-        GLOBAL_EXTENSION_FILTER.append(x.strip().lower())
+        global_extension_filter.append(x.strip().lower())
 
 JD_EMAIL = environ.get(
     "JD_EMAIL",
@@ -455,6 +460,20 @@ LEECH_CAPTION_FONT = environ.get(
 )
 if len(LEECH_CAPTION_FONT) == 0:
     LEECH_CAPTION_FONT = ""
+
+METADATA_TXT = environ.get(
+    "METADATA_TXT",
+    ""
+)
+if len(METADATA_TXT) == 0:
+    METADATA_TXT = ""
+
+META_ATTACHMENT = environ.get(
+    "META_ATTACHMENT",
+    ""
+)
+if len(META_ATTACHMENT) == 0:
+    META_ATTACHMENT = ""
 
 SEARCH_PLUGINS = environ.get(
     "SEARCH_PLUGINS",
@@ -1051,6 +1070,9 @@ if (
     MEGA_PASSWORD = ""
 
 
+THUMBNAIL_LAYOUT = environ.get("THUMBNAIL_LAYOUT", "")
+THUMBNAIL_LAYOUT = "" if len(THUMBNAIL_LAYOUT) == 0 else THUMBNAIL_LAYOUT
+
 config_dict = {
     "AS_DOCUMENT": AS_DOCUMENT,
     "AUTHORIZED_CHATS": AUTHORIZED_CHATS,
@@ -1098,6 +1120,8 @@ config_dict = {
     "MIXED_LEECH": MIXED_LEECH,
     "MEGA_LIMIT": MEGA_LIMIT,
     "MINIMUM_DURATOIN": MINIMUM_DURATOIN,
+    "METADATA_TXT": METADATA_TXT,
+    "META_ATTACHMENT": META_ATTACHMENT,
     "NAME_SUBSTITUTE": NAME_SUBSTITUTE,
     "NZB_LIMIT": NZB_LIMIT,
     "PLAYLIST_LIMIT": PLAYLIST_LIMIT,
@@ -1129,6 +1153,7 @@ config_dict = {
     "TELEGRAM_API": TELEGRAM_API,
     "TELEGRAM_HASH": TELEGRAM_HASH,
     "TORRENT_LIMIT": TORRENT_LIMIT,
+    "THUMBNAIL_LAYOUT": THUMBNAIL_LAYOUT,
     "TORRENT_TIMEOUT": TORRENT_TIMEOUT,
     "TOKEN_TIMEOUT": TOKEN_TIMEOUT,
     "USER_TRANSMISSION": USER_TRANSMISSION,
@@ -1146,9 +1171,9 @@ config_dict = {
 config_dict = OrderedDict(sorted(config_dict.items()))
 
 if GDRIVE_ID:
-    DRIVES_NAMES.append("Main")
-    DRIVES_IDS.append(GDRIVE_ID)
-    INDEX_URLS.append(INDEX_URL)
+    drives_names.append("Main")
+    drives_ids.append(GDRIVE_ID)
+    index_urls.append(INDEX_URL)
 
 KEY = ("@Z_Mirror")
 
@@ -1160,12 +1185,12 @@ if ospath.exists("list_drives.txt"):
         lines = f.readlines()
         for line in lines:
             temp = line.strip().split()
-            DRIVES_IDS.append(temp[1])
-            DRIVES_NAMES.append(temp[0].replace("_", " "))
+            drives_ids.append(temp[1])
+            drives_names.append(temp[0].replace("_", " "))
             if len(temp) > 2:
-                INDEX_URLS.append(temp[2])
+                index_urls.append(temp[2])
             else:
-                INDEX_URLS.append("")
+                index_urls.append("")
 
 if ospath.exists("buttons.txt"):
     with open(
@@ -1205,11 +1230,7 @@ if BASE_URL:
 
 if ospath.exists("accounts.zip"):
     if ospath.exists("accounts"):
-        run([
-            "rm",
-            "-rf",
-            "accounts"
-        ])
+        rmtree("accounts")
     run([
         "7z",
         "x",
@@ -1230,7 +1251,7 @@ if not ospath.exists("accounts"):
     config_dict["USE_SERVICE_ACCOUNTS"] = False
 
 
-qbittorrent_client = qbClient(
+qbittorrent_client = QbClient(
     host="localhost",
     port=8090,
     VERIFY_WEBUI_CERTIFICATE=False,
@@ -1244,7 +1265,7 @@ qbittorrent_client = qbClient(
 
 BASE += ("G8k7bAblAEkiZDyAAjM6a")
 
-sabnzbd_client = sabnzbdClient(
+sabnzbd_client = SabnzbdClient(
     host="http://localhost",
     api_key="zee",
     port="8070",
@@ -1267,7 +1288,7 @@ aria2c_global = [
     "server-stat-of",
 ]
 
-bot = tgClient(
+bot = TgClient(
     "zeeb",
     TELEGRAM_API,
     TELEGRAM_HASH,
@@ -1275,7 +1296,6 @@ bot = tgClient(
     app_version="@Z_Mirror Session",
     device_model="@Z_Mirror Bot",
     system_version="@Z_Mirror Server",
-    workers=99999,
 ).start()
 
 BASE += ("oAtiUyppVYRQkuWg8DG2p")

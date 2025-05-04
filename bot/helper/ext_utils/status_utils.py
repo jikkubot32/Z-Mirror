@@ -12,13 +12,13 @@ from bot import (
     DOWNLOAD_DIR,
     task_dict,
     task_dict_lock,
-    botStartTime,
+    bot_start_time,
     config_dict,
     status_dict,
 )
-from bot.helper.ext_utils.bot_utils import sync_to_async
-from bot.helper.telegram_helper.button_build import ButtonMaker
-from bot.helper.telegram_helper.bot_commands import BotCommands
+from .bot_utils import sync_to_async
+from ..telegram_helper.button_build import ButtonMaker
+from ..telegram_helper.bot_commands import BotCommands
 
 SIZE_UNITS = [
     "B",
@@ -44,6 +44,7 @@ class MirrorStatus:
     STATUS_SEEDING = "Seed 🌧"
     STATUS_SAMVID = "SampleVid 🎬"
     STATUS_CONVERTING = "Convert ♻️"
+    STATUS_METADATA = "Metadata 📝"
 
 
 STATUSES = {
@@ -61,10 +62,11 @@ STATUSES = {
     "CK": MirrorStatus.STATUS_CHECKING,
     "SV": MirrorStatus.STATUS_SAMVID,
     "PA": MirrorStatus.STATUS_PAUSED,
+    "MD": MirrorStatus.STATUS_METADATA
 }
 
 
-async def getTaskByGid(gid: str):
+async def get_task_by_gid(gid: str):
     async with task_dict_lock:
         for tk in task_dict.values():
             if hasattr(
@@ -77,22 +79,22 @@ async def getTaskByGid(gid: str):
         return None
 
 
-def getSpecificTasks(status, userId):
+def get_specific_tasks(status, user_id):
     if status == "All":
-        if userId:
+        if user_id:
             return [
                 tk
                 for tk
                 in task_dict.values()
-                if tk.listener.userId == userId
+                if tk.listener.user_id == user_id
             ]
         else:
             return list(task_dict.values())
-    elif userId:
+    elif user_id:
         return [
             tk
             for tk in task_dict.values()
-            if tk.listener.userId == userId
+            if tk.listener.user_id == user_id
             and (
                 (st := tk.status())
                 and st == status
@@ -111,27 +113,25 @@ def getSpecificTasks(status, userId):
         ]
 
 
-async def getAllTasks(req_status: str, userId):
+async def get_all_tasks(req_status: str, user_id):
     async with task_dict_lock:
         return await sync_to_async(
-            getSpecificTasks,
+            get_specific_tasks,
             req_status,
-            userId
+            user_id
         )
 
 
 def get_readable_file_size(size_in_bytes):
-    if size_in_bytes is None:
+    if not size_in_bytes:
         return "0B"
+
     index = 0
     while size_in_bytes >= 1024 and index < len(SIZE_UNITS) - 1:
-        size_in_bytes /= 1024 # type: ignore
+        size_in_bytes /= 1024
         index += 1
-    return (
-        f"{size_in_bytes:.2f}{SIZE_UNITS[index]}"
-        if index > 0
-        else f"{size_in_bytes:.2f}B"
-    )
+
+    return f"{size_in_bytes:.2f}{SIZE_UNITS[index]}"
 
 
 def get_readable_time(seconds):
@@ -207,7 +207,7 @@ async def get_readable_message(
     button = None
 
     tasks = await sync_to_async(
-        getSpecificTasks,
+        get_specific_tasks,
         status,
         sid
         if is_user
@@ -243,7 +243,7 @@ async def get_readable_message(
         user_tag = task.listener.tag.replace("@", "").replace("_", " ")
         cancel_task = (
             f"<code>/{BotCommands.CancelTaskCommand[1]} {task.gid()}</code>"
-            if not task.listener.getChat.has_protected_content
+            if not task.listener.get_chat.has_protected_content
             else f"<b>/{BotCommands.CancelTaskCommand[1]}_{task.gid()}</b>"
         )
 
@@ -252,19 +252,21 @@ async def get_readable_message(
             and int(config_dict["AUTO_DELETE_MESSAGE_DURATION"]) > 0
         ):
             msg += (
-                f"<pre>\r\n{index + start_position} ➜ "
-                f"{escape(f"{task.name()}")}\n</pre>"
+                f"<b><i>\n#Zee{index + start_position}: "
+                f"{escape(f"{task.name()}")}\n</i></b>"
                 if elapse <= config_dict["AUTO_DELETE_MESSAGE_DURATION"]
-                else f"\n<blockquote>{index + start_position} ➜ (Processing)</blockquote>"
+                else f"\n<b>#Zee{index + start_position}...(Processing)</b>"
             )
         else:
             msg += (
-                f"<pre>\r\n{index + start_position} ➜ "
-                f"{escape(f"{task.name()}")}\n</pre>"
+                f"<b><i>\n#Zee{index + start_position}: "
+                f"{escape(f"{task.name()}")}\n</i></b>"
             )
         if tstatus not in [
             MirrorStatus.STATUS_SEEDING,
+            MirrorStatus.STATUS_QUEUEDL,
             MirrorStatus.STATUS_QUEUEUP,
+            MirrorStatus.STATUS_METADATA
         ]:
             progress = (
                 await task.progress()
@@ -279,7 +281,7 @@ async def get_readable_message(
                 f"\n<code>ETA    :</code> {task.eta()}"
                 f"\n<code>Past   :</code> {elapsed}"
                 f"\n<code>User   :</code> <b>{user_tag}</b>"
-                f"\n<code>UserID :</code> ||{task.listener.userId}||"
+                f"\n<code>UserID :</code> ||{task.listener.user_id}||"
                 f"\n<code>Upload :</code> {task.listener.mode}"
                 f"\n<code>Engine :</code> <b><i>{task.engine}</i></b>"
             )
@@ -315,10 +317,10 @@ async def get_readable_message(
                 f"\n<code>Upload :</code> {task.listener.mode}"
                 f"\n<code>Past   :</code> {elapsed}"
                 f"\n<code>User   :</code> {user_tag}"
-                f"\n<code>UserID :</code> ||{task.listener.userId}||"
+                f"\n<code>UserID :</code> ||{task.listener.user_id}||"
                 f"\n<code>Engine :</code> {task.engine}"
             )
-        msg += f"\n<blockquote>⚠️ {cancel_task}</blockquote>\n\n"
+        msg += f"\n⚠️ {cancel_task}\n\n"
 
     if len(msg) == 0:
         if status == "All":
@@ -330,35 +332,35 @@ async def get_readable_message(
             msg = f"No Active {status} Tasks!\n\n"
     buttons = ButtonMaker()
     if is_user:
-        buttons.ibutton(
+        buttons.data_button(
             "ʀᴇғʀᴇsʜ",
             f"status {sid} ref",
             position="header"
         )
     if not is_user:
-        buttons.ibutton(
+        buttons.data_button(
             "ᴛᴀsᴋs\nɪɴғᴏ",
             f"status {sid} ov",
             position="footer"
         )
-        buttons.ibutton(
+        buttons.data_button(
             "sʏsᴛᴇᴍ\nɪɴғᴏ",
             f"status {sid} stats",
             position="footer"
         )
     if len(tasks) > STATUS_LIMIT:
         msg += f"<b>Tasks:</b> {tasks_no} | <b>Step:</b> {page_step}\n"
-        buttons.ibutton(
+        buttons.data_button(
             "⫷",
             f"status {sid} pre",
             position="header"
         )
-        buttons.ibutton(
+        buttons.data_button(
             f"ᴘᴀɢᴇs\n{page_no}/{pages}",
             f"status {sid} ref",
             position="header"
         )
-        buttons.ibutton(
+        buttons.data_button(
             "⫸",
             f"status {sid} nex",
             position="header"
@@ -373,7 +375,7 @@ async def get_readable_message(
                 10,
                 15
             ]:
-                buttons.ibutton(
+                buttons.data_button(
                     i,
                     f"status {sid} ps {i}"
                 )
@@ -386,7 +388,7 @@ async def get_readable_message(
             status_value
         ) in list(STATUSES.items())[:9]:
             if status_value != status:
-                buttons.ibutton(
+                buttons.data_button(
                     label,
                     f"status {sid} st {status_value}"
                 )
@@ -396,7 +398,7 @@ async def get_readable_message(
         f"<b>CPU</b>: {cpu_percent()}% | "
         f"<b>FREE</b>: {get_readable_file_size(disk_usage(DOWNLOAD_DIR).free)}\n"
         f"<b>RAM</b>: {virtual_memory().percent}% | "
-        f"<b>UPTM</b>: {get_readable_time(time() - botStartTime)}"
+        f"<b>UPTM</b>: {get_readable_time(time() - bot_start_time)}"
     )
     return (
         msg,

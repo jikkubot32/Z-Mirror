@@ -1,20 +1,24 @@
 from io import BytesIO
-from pyrogram.filters import command
-from pyrogram.handlers import (
+
+from nekozee.filters import command
+from nekozee.handlers import (
     MessageHandler,
     EditedMessageHandler
 )
 
-from bot import LOGGER, bot
-from bot.helper.ext_utils.bot_utils import (
+from bot import (
+    LOGGER,
+    bot
+)
+from ..helper.ext_utils.bot_utils import (
     cmd_exec,
     new_task
-)
-from bot.helper.telegram_helper.bot_commands import BotCommands
-from bot.helper.telegram_helper.filters import CustomFilters
-from bot.helper.telegram_helper.message_utils import (
-    sendMessage,
-    sendFile
+    )
+from ..helper.telegram_helper.bot_commands import BotCommands
+from ..helper.telegram_helper.filters import CustomFilters
+from ..helper.telegram_helper.message_utils import (
+    send_message,
+    send_file
 )
 
 
@@ -22,7 +26,7 @@ from bot.helper.telegram_helper.message_utils import (
 async def shell(_, message):
     cmd = message.text.split(maxsplit=1)
     if len(cmd) == 1:
-        await sendMessage(
+        await send_message(
             message,
             "No command to execute was given."
         )
@@ -46,17 +50,17 @@ async def shell(_, message):
     if len(reply) > 3000:
         with BytesIO(str.encode(reply)) as out_file:
             out_file.name = "shell_output.txt"
-            await sendFile(
+            await send_file(
                 message,
                 out_file
             )
     elif len(reply) != 0:
-        await sendMessage(
+        await send_message(
             message,
             reply
         )
     else:
-        await sendMessage(
+        await send_message(
             message,
             "No Reply"
         )

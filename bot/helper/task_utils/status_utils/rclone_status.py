@@ -1,6 +1,5 @@
-from bot.helper.ext_utils.status_utils import MirrorStatus
+from ...ext_utils.status_utils import MirrorStatus
 from subprocess import run as rrun
-
 
 
 class RcloneStatus:

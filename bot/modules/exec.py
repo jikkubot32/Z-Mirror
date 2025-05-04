@@ -6,21 +6,26 @@ from os import (
     getcwd,
     chdir
 )
-from pyrogram.filters import command
-from pyrogram.handlers import MessageHandler
+
+from nekozee.filters import command
+from nekozee.handlers import MessageHandler
+
 from textwrap import indent
 from traceback import format_exc
 
-from bot import LOGGER, bot
-from bot.helper.ext_utils.bot_utils import (
-    sync_to_async,
-    new_task
+from bot import (
+    LOGGER,
+    bot
 )
-from bot.helper.telegram_helper.bot_commands import BotCommands
-from bot.helper.telegram_helper.filters import CustomFilters
-from bot.helper.telegram_helper.message_utils import (
-    sendFile,
-    sendMessage
+from ..helper.ext_utils.bot_utils import (
+    new_task,
+    sync_to_async
+)
+from ..helper.telegram_helper.bot_commands import BotCommands
+from ..helper.telegram_helper.filters import CustomFilters
+from ..helper.telegram_helper.message_utils import (
+    send_file,
+    send_message
 )
 
 namespaces = {}
@@ -49,13 +54,13 @@ async def send(msg, message):
     if len(str(msg)) > 2000:
         with BytesIO(str.encode(msg)) as out_file:
             out_file.name = "output.txt"
-            await sendFile(
+            await send_file(
                 message,
                 out_file
             )
     else:
         LOGGER.info(f"OUT: '{msg}'")
-        await sendMessage(
+        await send_message(
             message,
             f"<code>{msg}</code>"
         )
@@ -160,6 +165,7 @@ async def do(func, message):
             return result
 
 
+@new_task
 async def clear(_, message):
     log_input(message)
     global namespaces
